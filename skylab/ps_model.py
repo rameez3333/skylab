@@ -612,12 +612,12 @@ class PowerLawLLH(WeightLLH):
         dg = self._precision
 
         # evaluate neighbouring gridpoints and parametrize a parabola
-        g0 = g1 - dg
-        g2 = g1 + dg
+        g0 = self._around(g1 - dg)
+        g2 = self._around(g1 + dg)
 
-        S0 = self._spline_eval(self._w_spline_dict[dict(gamma=g0)], ev)
-        S1 = self._spline_eval(self._w_spline_dict[dict(gamma=g1)], ev)
-        S2 = self._spline_eval(self._w_spline_dict[dict(gamma=g2)], ev)
+        S0 = self._spline_eval(self._w_spline_dict[tuple([('gamma',g0,)])], ev)
+        S1 = self._spline_eval(self._w_spline_dict[tuple([('gamma',g1,)])], ev)
+        S2 = self._spline_eval(self._w_spline_dict[tuple([('gamma',g2,)])], ev)
 
         a = (S0 - 2.*S1 + S2) / (2. * dg**2)
         b = (S2 - S0) / (2. * dg)
