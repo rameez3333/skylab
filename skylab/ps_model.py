@@ -648,6 +648,7 @@ class EnergyLLH(PowerLawLLH):
         return
 
 
+
 class EnergyDistLLH(PowerLawLLH):
     r"""Likelihood using Energy Proxy and starting distance for evaluation.
     Declination is not used for normalisation assuming that the energy does not

@@ -373,6 +373,12 @@ class PointSourceLLH(object):
 
         scramble = kwargs.pop("scramble", False)
         inject = kwargs.pop("inject", None)
+        stack = kwargs.pop("stack", False)
+        
+	if stack:
+	    log.info("When Stacking, all events are selected automatically")
+	    self.mode = "all"
+        
         if kwargs:
             raise ValueError("Don't know arguments", kwargs.keys())
 
@@ -1047,6 +1053,29 @@ class PointSourceLLH(object):
         grad = 2. * grad
 
         return LogLambda, grad
+    
+    def fit_stack(self, src_ra, src_dec, src_sigma, src_weight, **kwargs):
+	def _llh(x, *args):
+            """Scale likelihood variables so that they are both normalized.
+            Returns -logLambda which is the test statistic and should
+            be distributed with a chi2 distribution assuming the null
+            hypothesis is true.
+
+            """
+
+            fit_pars = dict([(par, xi) for par, xi in zip(self.params, x)])
+
+            fun, grad = self.llh(src_ra, src_dec, ev, **fit_pars)
+
+            # return negative value needed for minimization
+            return -fun, -grad
+
+        scramble = kwargs.pop("scramble", False)
+        inject = kwargs.pop("inject", None)
+        stack = kwargs.pop("stack", False)
+        kwargs.setdefault("pgtol", _pgtol)
+        
+        ev = self._select_events(src_ra, src_dec, inject=inject, scramble=scramble, stack=stack)
 
     def fit_source(self, src_ra, src_dec, **kwargs):
         """Minimize the negative log-Likelihood at source position(s).
