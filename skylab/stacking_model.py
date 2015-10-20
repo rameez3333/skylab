@@ -1,9 +1,12 @@
 import ps_model
+import numpy as np
 
-EnergyLLH = ps_model.EnergyLLH
+_2dim_bins = 25
+
+PowerLawLLH = ps_model.PowerLawLLH
 
 
-class StackingLLH(EnergyLLH):
+class StackingLLH(PowerLawLLH):
     r"""Likelihood using Energy Proxy and declination, where declination is
     used for normalisation to account for changing energy distributions.
 
@@ -15,7 +18,6 @@ class StackingLLH(EnergyLLH):
         """
         super(StackingLLH, self).__init__(["logE", "sinDec"],
                                         twodim_bins, range=twodim_range,
-                                        normed=1,
                                         **kwargs)
 
 
@@ -23,7 +25,7 @@ class StackingLLH(EnergyLLH):
 
         return
     
-    def signal(self, src_ra, src_dec, ev,  src_sigmas):
+    def signal(self, src_ra, src_dec, ev,  src_sigma):
         r"""Spatial distance between source position and events
 
         Signal is assumed to cluster around source position.
@@ -55,10 +57,10 @@ class StackingLLH(EnergyLLH):
                             * np.cos(src_dec[:, np.newaxis]) * cos_ev
                          + np.sin(src_dec[:, np.newaxis])*ev["sinDec"])
 	
-	sigpdfarr = (1./2./np.pi/(ev["sigma"]**2 + src_sigma[:,np.newaxis]**2)
-                * np.exp(-dist**2 / 2. / (ev["sigma"]**2 + src_sigma[:,np.newaxis]**2)))
+
 	
 	
 
-        return 
+        return (1./2./np.pi/(ev["sigma"]**2 + src_sigma[:,np.newaxis]**2)
+                * np.exp(-dist**2 / 2. / (ev["sigma"]**2 + src_sigma[:,np.newaxis]**2)))
      
