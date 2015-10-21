@@ -1,7 +1,7 @@
 import psLLH
 from ps_injector import PointSourceInjector
 import numpy as np
-
+from copy import deepcopy
 import logging
 import healpy as hp
 import numpy as np
@@ -11,8 +11,12 @@ import scipy.optimize
 import scipy.stats
 from scipy.signal import convolve2d
 
-_gamma_bins = np.linspace(1., 4., 50 + 1)
+_precision = (4.-1.)/30.
+_gamma_bins = np.linspace(1., 4., 30 + 1)
 _pgtol = 1.e-3
+_gamma_params = dict(gamma=[2., (1., 4.)])
+_aval = 1.e-3
+_rho_max = 0.95
 
 def trace(self, message, *args, **kwargs):
     r"""Add trace to logger with output level beyond debug
@@ -31,6 +35,26 @@ PointSourceLLH = psLLH.PointSourceLLH
 
 class PointSourceStackingLLH(PointSourceLLH):
     _SrcWeightsDict = {}
+    _SrcWeightsTable ={}
+    
+    _precision = _precision
+    
+    def _around(self, value):
+        r"""Round a value to a precision defined in the class.
+
+        Parameters
+        -----------
+        value : array-like
+            Values to round to precision.
+
+        Returns
+        --------
+        round : array-like
+            Rounded values.
+
+        """
+        return _gamma_bins[((value - _gamma_bins).clip(min=0)).argmin()]
+    
     def makeSrcWeightsTable(self, src_dec, src_weights, arr_mc):
       
 	src_weights = src_weights/src_weights.sum()
@@ -44,16 +68,28 @@ class PointSourceStackingLLH(PointSourceLLH):
 	      injectordict[gamma][dec] = PointSourceInjector(gamma=gamma)
 	      injectordict[gamma][dec].fill(np.deg2rad(dec), arr_mc)
 	
-	SrcWeightsTable = np.empy([len(src_dec), len(_gamma_bins)])
+
+	
+	SrcWeightsTable = np.empty([len(src_dec), len(_gamma_bins)])
 	
 	for i in range(0, len(src_dec)):
 	  for j in range(0, len(_gamma_bins)):
 	    SrcWeightsTable[i][j] = injectordict[_gamma_bins[j]][src_dec[i]].flux2mu(1.)*src_weights[i]
 	    SrcWeightsDict[_gamma_bins[j]][i] = SrcWeightsTable[i][j]
+	
+	for gamma in _gamma_bins:
+	  sumrow = 0.
+	  for i in range(0, len(src_dec)):
+	    sumrow = sumrow + SrcWeightsDict[gamma][i]
+	  SrcWeightsDict[gamma] = SrcWeightsDict[gamma]/sumrow    
+
 	    
-	print SrcWeightsTable
+	#print SrcWeightsTable
 	
 	self._SrcWeightsDict = SrcWeightsDict
+	
+	for key in sorted(self._SrcWeightsDict.keys()):
+	  print key, self._SrcWeightsDict[key]
 	
 	return SrcWeightsTable
   
@@ -143,16 +179,18 @@ class PointSourceStackingLLH(PointSourceLLH):
                     ("For point at ra = {0:6.2f} deg, dec = {1:-6.2f} deg, " +
                      "{2:6d} events were selected").format(
                           np.degrees(src_ra[0]), np.degrees(src_dec[0]), n))
-
+	
+	#print ev
+	print evsigarray
+	
         return ev, evsigarray
     
     
-    def llh(self, src_ra, src_dec, ev, src_weights, **fit_pars):
+    def llh(self, src_ra, src_dec, ev, evsigarray, src_weights, **fit_pars):
       
 	nsources = fit_pars.pop("nsources")
-	gamma = fit_pars.pop("gamma")
-	
-	self.makeSrcWeightsTable(src_dec, src_weights, self.mc)
+	gamma = fit_pars['gamma']
+	#print "This is the fucking fitpars", fit_pars
 	
 	n = len(ev)
 	N = self.N
@@ -173,10 +211,21 @@ class PointSourceStackingLLH(PointSourceLLH):
         a = (W0 - 2.*W1 + W2)/(2. *dg**2)
         b = (W2-W0)/(2.*dg)
         
-        wval = np.exp(a * (gamma - g1)**2 + b * (gamma - g1) + W1)
+        wval = (a * (gamma - g1)**2 + b * (gamma - g1) + W1)
+        
+        #print gamma, g0, g1, g2
+        
+        wval = wval/wval.sum()
+        
+        #print wval
+        
         wgrad = wval * (2. * a * (gamma - g1) + b)
         
-        SoB = np.dot(wval, ev["S"]) / ev["B"]
+        SoB = np.dot(wval, evsigarray) / ev["B"]
+        
+        #print "Sum", SoB.sum()
+        
+        wSoB = np.dot(wgrad, evsigarray) / ev["B"]
         
         w, grad_w = self.llh_model.weight(ev, **fit_pars)
 	
@@ -210,7 +259,7 @@ class PointSourceStackingLLH(PointSourceLLH):
 
         # in weights
         if grad_w is not None:
-            par_grad = 1. / N * SoB * grad_w
+            par_grad = 0.5 / N * SoB * grad_w + 0.5 / N * wSoB
 
             par_grad[:, xmask] *= nsources / (1. + alpha[xmask])
             par_grad[:, ~xmask] *= (nsources / (1. + aval)
@@ -242,11 +291,13 @@ class PointSourceStackingLLH(PointSourceLLH):
 
             fit_pars = dict([(par, xi) for par, xi in zip(self.params, x)])
 
-            fun, grad = self.llh(src_ra, src_dec, ev, evsigarray, **fit_pars)
+            fun, grad = self.llh(src_ra, src_dec, ev, evsigarray, src_weight, **fit_pars)
 
             # return negative value needed for minimization
             return -fun, -grad
-
+	
+	self.makeSrcWeightsTable(src_dec, src_weight, self.mc)
+	
         scramble = kwargs.pop("scramble", False)
         inject = kwargs.pop("inject", None)
         stack = kwargs.pop("stack", True)

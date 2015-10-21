@@ -271,6 +271,7 @@ class PointSourceLLH(object):
                                                       usemask=False)
 
         self.exp = exp
+        self.mc = mc
 
         # weight Monte Carlo weights by livetime in seconds
         mc["ow"] *= 3600. * 24. * livetime
